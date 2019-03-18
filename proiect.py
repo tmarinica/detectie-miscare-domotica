@@ -6,12 +6,18 @@ import time
 cap = cv2.VideoCapture(0)
 frontal_face_cascade = cv2.CascadeClassifier('haarcascade_frontalface_default.xml')
 profile_face_cascade = cv2.CascadeClassifier('lbpcascade_profileface.xml')
+upper_body_cascade = cv2.CascadeClassifier('haarcascade_upperbody.xml')
+
 #sys.exit(0)
 
 hasStabilityTimerAlreadyStarted = False
 stabilityStartTime = None
+stabilityEndTime = None
 
+hasBetweenSendsTimeTimerAlreadyStarted = False
 betweenSendsStartTime = None
+betweenSendsEndTime = None
+betweenSendsTimerDuration = None
 
 
 while(True):
@@ -31,8 +37,14 @@ while(True):
         minSize=(30, 30)
     )
 
-    
-    if len(faces_frontal) != 0:
+    upper_body_profile = upper_body_cascade.detectMultiScale(
+        gray,
+        scaleFactor=1.1,
+        minNeighbors=15,
+        minSize=(30, 30)
+    )
+
+    if (len(faces_frontal) != 0 or len(upper_body_profile) != 0):
         if not hasStabilityTimerAlreadyStarted:
             stabilityStartTime = time.time()
             hasStabilityTimerAlreadyStarted = True
@@ -47,11 +59,23 @@ while(True):
             stabilityDuration = stabilityEndTime - stabilityStartTime
             #print(duration)
             if stabilityDuration > 1:
-                print("a trecut 1 sec")
+                print("a trecut 1 sec de stabilitate")
+
+                if not hasBetweenSendsTimeTimerAlreadyStarted or (hasBetweenSendsTimeTimerAlreadyStarted and betweenSendsTimerDuration >= 10): 
+                    print("trimit poza...")
+                    hasBetweenSendsTimeTimerAlreadyStarted = False
+                    betweenSendsTimerDuration = 0
+                
+                if not hasBetweenSendsTimeTimerAlreadyStarted:
+                    hasBetweenSendsTimeTimerAlreadyStarted = True
+                    betweenSendsStartTime = time.time()
+
                 hasStabilityTimerAlreadyStarted = False
 
-
-
+    if betweenSendsStartTime:
+        betweenSendsEndTime = time.time()
+        betweenSendsTimerDuration = betweenSendsEndTime - betweenSendsStartTime
+        print("betweenSendsTimerDuration = "+str(betweenSendsTimerDuration))
     
 
     for (x,y,w,h) in faces_frontal:
@@ -60,6 +84,10 @@ while(True):
     #faces_profile = profile_face_cascade.detectMultiScale(gray, 1.3, 5)
     #for (x,y,w,h) in faces_profile:
         #cv2.rectangle(originalFrame, (x,y), (x+w,y+h), (0,255,0), 2)
+
+    
+    for (x,y,w,h) in upper_body_profile:
+        cv2.rectangle(originalFrame, (x,y), (x+w,y+h), (0,255,0), 2)
 
     # Display the resulting frame
     cv2.imshow('frame',originalFrame)
