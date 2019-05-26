@@ -2,6 +2,16 @@ import numpy as np
 import cv2
 import sys
 import time
+import pika
+import base64
+
+#connect to rabbitmq
+
+credentials = pika.PlainCredentials('test', 'test')
+connection = pika.BlockingConnection(pika.ConnectionParameters('192.168.43.211', 5672, '/', credentials))
+channel = connection.channel()
+channel.exchange_declare(exchange='poze', exchange_type='fanout', durable='true')
+
 
 cap = cv2.VideoCapture(0)
 frontal_face_cascade = cv2.CascadeClassifier('haarcascade_frontalface_default.xml')
@@ -19,7 +29,6 @@ betweenSendsStartTime = None
 betweenSendsEndTime = None
 betweenSendsTimerDuration = None
 
-
 while(True):
     # Capture frame-by-frame
     ret, originalFrame = cap.read()
@@ -30,6 +39,7 @@ while(True):
     # Our operations on the frame come here
     gray = cv2.cvtColor(originalFrame, cv2.COLOR_BGR2GRAY)
 
+    
     faces_frontal = frontal_face_cascade.detectMultiScale(
         gray,
         scaleFactor=1.1,
@@ -37,12 +47,16 @@ while(True):
         minSize=(30, 30)
     )
 
+    upper_body_profile = []
+
+    '''
     upper_body_profile = upper_body_cascade.detectMultiScale(
         gray,
-        scaleFactor=1.1,
+        scaleFactor=2,
         minNeighbors=15,
         minSize=(30, 30)
     )
+    '''
 
     if (len(faces_frontal) != 0 or len(upper_body_profile) != 0):
         if not hasStabilityTimerAlreadyStarted:
@@ -61,8 +75,16 @@ while(True):
             if stabilityDuration > 1:
                 print("a trecut 1 sec de stabilitate")
 
-                if not hasBetweenSendsTimeTimerAlreadyStarted or (hasBetweenSendsTimeTimerAlreadyStarted and betweenSendsTimerDuration >= 10): 
+                if not hasBetweenSendsTimeTimerAlreadyStarted or (hasBetweenSendsTimeTimerAlreadyStarted and betweenSendsTimerDuration >= 5): 
                     print("trimit poza...")
+
+                    retval, buffer = cv2.imencode('.jpg', originalFrame)
+                    jpg_as_text = base64.b64encode(buffer)
+                    
+                    #print(jpg_as_text)
+
+                    channel.basic_publish(exchange='poze', routing_key='poze', body=jpg_as_text)
+
                     hasBetweenSendsTimeTimerAlreadyStarted = False
                     betweenSendsTimerDuration = 0
                 
@@ -92,8 +114,10 @@ while(True):
     # Display the resulting frame
     cv2.imshow('frame',originalFrame)
     if cv2.waitKey(1) & 0xFF == ord('q'):
+        connection.close()
         break
 
 # When everything done, release the capture
 cap.release()
 cv2.destroyAllWindows()
+connection.close()
